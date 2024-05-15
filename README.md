@@ -74,6 +74,9 @@ Geliştirme sunucusunu başlatmak için:
 
 Postman Dökümantasyonuna Ulaşmak için: `https://documenter.getpostman.com/view/26732863/2sA3JRYeJq` 
 
+## Proje Google Docs
+
+Google Rehber Dökümantasyonuna Ulaşmak için: `https://docs.google.com/document/d/1xehrJa2vwMG6webWovleyCc_g3E4gVwX3NE-hlQVnUM/edit?usp=sharing`
 ## Proje Notları
 
 Proje için gerekli testlerin tamamını denetlemedim. Bundan dolayı olası olarak karşılaşacağınız hatalardan dolayı kusuruma bakmayınız.
