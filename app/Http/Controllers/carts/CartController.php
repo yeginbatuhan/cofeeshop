@@ -24,6 +24,12 @@ class CartController extends Controller
         $count = $request->input('count');
         $cartCode = $request->header('X-Cart-Code') ?: $this->generateCartCode();
         $product = Product::findOrFail($productId);
+        if ($product->stock_quantity == 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product is out of stock'
+            ], 400);
+        }
         $cart = Auth::check() ? Cart::where('user_id', Auth::id())->where('check_card', 0)->first() : Cart::where('cart_code', $cartCode)->where('check_card', 0)->first();
 
         if (!$cart) {
@@ -39,14 +45,28 @@ class CartController extends Controller
 
         $cartDetail = $cart->cartDetails()->where('product_id', $productId)->first();
         if ($cartDetail) {
+            if ($product->stock_quantity < $cartDetail->count + $count) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Not enough stock available'
+                ], 400);
+            }
             $cartDetail->count += $count;
         } else {
+            if ($product->stock_quantity < $count) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Not enough stock available'
+                ], 400);
+            }
             $cartDetail = new CartDetail([
                 'product_id' => $productId,
                 'count' => $count,
                 'price' => $product->price,
             ]);
         }
+        $product->stock_quantity -= $count;
+        $product->save();
         $cart->cartDetails()->save($cartDetail);
 
         return response()->json([
@@ -61,8 +81,9 @@ class CartController extends Controller
 
     public function updateCart(Request $request, CartDetail $cartDetail)
     {
-        $count = $request->input('count');
+        $newCount  = $request->input('count');
         $cartCode = $request->header('X-Cart-Code');
+
         if ($cartDetail->cart->check_card == 1) {
             return response()->json([
                 'success' => false,
@@ -78,7 +99,28 @@ class CartController extends Controller
             return response()->json(['success' => false,'message' => 'Unauthorized'], 403);
         }
 
-        $cartDetail->count = $count;
+        $product = $cartDetail->products;
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+        $currentCount = $cartDetail->count;
+        $countDifference = $newCount - $currentCount;
+        if ($countDifference > 0) {
+            if ($product->stock_quantity < $countDifference) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Not enough stock available'
+                ], 400);
+            }
+            $product->stock_quantity -= $countDifference;
+        } else {
+            $product->stock_quantity += abs($countDifference);
+        }
+        $product->save();
+        $cartDetail->count = $newCount;
         $cartDetail->save();
 
         return response()->json([
@@ -106,7 +148,10 @@ class CartController extends Controller
         } else if (!$cartCode || $cartDetail->cart->cart_code !== $cartCode) {
             return response()->json(['success' => false,'message' => 'Unauthorized'], 403);
         }
-
+        $product = $cartDetail->products;
+        $count = $cartDetail->count;
+        $product->stock_quantity += $count;
+        $product->save();
         $cart = $cartDetail->cart;
         $cartDetail->delete();
 
