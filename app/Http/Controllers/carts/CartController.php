@@ -172,51 +172,67 @@ class CartController extends Controller
             return response()->json(['success' => false,'message' => 'Unauthorized'], 403);
         }
 
-        $totalPrice = $cart->total_price;
-        if (Auth::check())
-        {
+        $originalTotalPrice = $cart->total_price;
+        $totalPrice = $originalTotalPrice;
+        $shippingCost = 54.99;
+        $discount = 0;
+        $discountPercentage = 0;
+        $reward = '';
+        if ($totalPrice >= 3000) {
+            $discountPercentage = 25;
+            $reward = 'You have earned 1 KG of coffee!';
+        } elseif ($totalPrice >= 2000) {
+            $discountPercentage = 20;
+        } elseif ($totalPrice >= 1500) {
+            $discountPercentage = 15;
+        } elseif ($totalPrice >= 1000) {
+            $discountPercentage = 10;
+        }
 
-            $user=User::whereId(auth()->id())->first();
+        if ($discountPercentage > 0) {
+            $discount = ($totalPrice * $discountPercentage) / 100;
+            $totalPrice -= $discount;
+        }
+        if ($originalTotalPrice > 500) {
+            $shippingCost = 0;
+        }
+
+        $totalPrice += $shippingCost;
+        $couponDiscount = 0;
+        $couponCode = null;
+        if (Auth::check()) {
+            $user = User::whereId(auth()->id())->first();
             $firstCoupon = $user->coupons->first();
-            if ($request->coupon)
-            {
-
-                if ($firstCoupon->code === $request->coupon)
-                {
-
-                    if ($firstCoupon)
-                    {
-
-                        $totalPrice=($totalPrice * $firstCoupon->percent)/100;
-                        $cart->check_card = 1;
-                        $cart->check_card_price=$totalPrice;
-                        $cart->save();
-                        $firstCoupon->delete();
-                    }else
-                    {
-                        $cart->check_card = 1;
-                        $cart->check_card_price=$totalPrice;
-                        $cart->save();
-                    }
-                }else{
+            if ($request->coupon) {
+                if ($firstCoupon && $firstCoupon->code === $request->coupon) {
+                    $couponCode = $firstCoupon->code;
+                    $couponDiscount = ($totalPrice * $firstCoupon->percent) / 100;
+                    $totalPrice -= $couponDiscount;
+                    $firstCoupon->delete();
+                } else {
                     return response()->json([
                         'success' => false,
-                        'message' => 'invalid code',
-                    ],403);
+                        'message' => 'Invalid code',
+                    ], 403);
                 }
-
             }
-        }else{
-            $cart->check_card = 1;
-            $cart->check_card_price=$totalPrice;
-            $cart->save();
         }
+        $cart->check_card = 1;
+        $cart->check_card_price = $totalPrice;
+        $cart->save();
         return response()->json([
             'success' => true,
             'message' => 'Cart checked out',
-            'referanceCode' =>$cart->cart_code,
-            'total_price' => $totalPrice
-        ],200);
+            'referenceCode' => $cart->cart_code,
+            'original_total_price' => $originalTotalPrice,
+            'discount_applied' => $discountPercentage . '%',
+            'discount_amount' => $discount,
+            'shipping_cost' => $shippingCost,
+            'coupon_code' => $couponCode,
+            'coupon_discount' => $couponDiscount,
+            'total_price_after_discounts' => $totalPrice,
+            'reward' => $reward
+        ], 200);
     }
 
     public function getCart(Request $request)
@@ -224,19 +240,54 @@ class CartController extends Controller
         $cartCode = $request->header('X-Cart-Code');
 
         if (Auth::check()) {
-            $cart = Cart::where('user_id', Auth::id())->where('check_card',0)->first();
+            $cart = Cart::where('user_id', Auth::id())->where('check_card', 0)->first();
         } else if ($cartCode) {
-            $cart = Cart::where('cart_code', $cartCode)->where('check_card',0)->whereNull('user_id')->first();
+            $cart = Cart::where('cart_code', $cartCode)->where('check_card', 0)->whereNull('user_id')->first();
         } else {
             return response()->json(['error' => 'No cart found'], 404);
         }
 
         if ($cart) {
             $cartDetails = $cart->cartDetails;
-            $totalPrice = $cart->total_price;
-            return response()->json(['cart_details' => $cartDetails, 'total_price' => $totalPrice]);
+            $originalTotalPrice = $cart->total_price;
+            $totalPrice = $originalTotalPrice;
+            $shippingCost = 54.99;
+            $discount = 0;
+            $discountPercentage = 0;
+            $reward = '';
+
+            if ($totalPrice >= 3000) {
+                $discountPercentage = 25;
+                $reward = 'You have earned 1 KG of coffee!';
+            } elseif ($totalPrice >= 2000) {
+                $discountPercentage = 20;
+            } elseif ($totalPrice >= 1500) {
+                $discountPercentage = 15;
+            } elseif ($totalPrice >= 1000) {
+                $discountPercentage = 10;
+            }
+            if ($discountPercentage > 0) {
+                $discount = ($totalPrice * $discountPercentage) / 100;
+                $totalPrice -= $discount;
+            }
+            if ($originalTotalPrice > 500) {
+                $shippingCost = 0;
+            }
+
+            $totalPrice += $shippingCost;
+
+            return response()->json([
+                'cart_details' => $cartDetails,
+                'original_total_price' => $originalTotalPrice,
+                'discount_applied' => $discountPercentage . '%',
+                'discount_amount' => $discount,
+                'shipping_cost' => $shippingCost,
+                'total_price_after_discounts' => $totalPrice,
+                'reward' => $reward
+            ]);
         } else {
             return response()->json(['error' => 'No cart found'], 404);
         }
     }
+
 }
